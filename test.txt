@@ -1,0 +1,1675 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+    Name = " SHOX MENU ULTIMATE",
+    LoadingTitle = "Loading SHOX Menu...",
+    LoadingSubtitle = "Mobile Fly & Enhanced Features",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SHOXMenu",
+        FileName = "Settings"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false,
+    ToggleUIKeybind = "K"
+})
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+
+local player = Players.LocalPlayer
+
+-- Ensure character exists
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Feature states
+local noclipEnabled = false
+local flyEnabled = false
+local superJumpEnabled = false
+local infiniteJumpEnabled = false
+local espEnabled = false
+local clickTeleportEnabled = false
+local fpsDisplayEnabled = false
+local antiAfkEnabled = false
+local instantPromptEnabled = false
+local promptHoldBypassEnabled = false
+local spinEnabled = false
+local gravityControlEnabled = false
+
+local savedLocations = {}
+
+-- Configuration system
+local configurations = {}
+local currentConfig = "Default"
+local configFolder = "SHOXMenu_Configs/"
+
+-- Feature objects
+local noclipConnection
+local flyConnection
+local clickTeleportConnection
+local espObjects = {}
+local fpsLabel
+local antiAfkConnection
+local promptConnection
+local promptBypassConnection
+local spinConnection
+local spinBodyVelocity
+local originalGravity
+
+local function ensureConfigFolder()
+    if not isfolder(configFolder) then
+        makefolder(configFolder)
+    end
+end
+
+local function saveConfiguration(configName)
+    ensureConfigFolder()
+    
+    local configData = {
+        name = configName,
+        creator = player.Name,
+        timestamp = os.time(),
+        date = os.date("%Y-%m-%d %H:%M:%S"),
+        
+        -- Feature states
+        walkSpeed = humanoid.WalkSpeed,
+        jumpPower = humanoid.JumpPower,
+        flySpeed = flyMaxSpeed,
+        spinSpeed = spinSpeed,
+        gravity = currentGravity,
+        antiAfkInterval = antiAfkInterval,
+        
+        -- Toggle states
+        flyEnabled = flyEnabled,
+        superJumpEnabled = superJumpEnabled,
+        infiniteJumpEnabled = infiniteJumpEnabled,
+        noclipEnabled = noclipEnabled,
+        espEnabled = espEnabled,
+        clickTeleportEnabled = clickTeleportEnabled,
+        fpsDisplayEnabled = fpsDisplayEnabled,
+        antiAfkEnabled = antiAfkEnabled,
+        instantPromptEnabled = instantPromptEnabled,
+        promptHoldBypassEnabled = promptHoldBypassEnabled,
+        spinEnabled = spinEnabled,
+        gravityControlEnabled = gravityControlEnabled,
+        
+        -- Saved locations
+        savedLocations = savedLocations
+    }
+    
+    local success, message = pcall(function()
+        writefile(configFolder .. configName .. ".json", HttpService:JSONEncode(configData))
+    end)
+    
+    if success then
+        Rayfield:Notify({
+            Title = "Configuration Saved",
+            Content = "Config '" .. configName .. "' saved successfully!",
+            Duration = 4
+        })
+        return true
+    else
+        Rayfield:Notify({
+            Title = "Save Error",
+            Content = "Failed to save config: " .. tostring(message),
+            Duration = 5
+        })
+        return false
+    end
+end
+
+local function loadConfiguration(configName)
+    ensureConfigFolder()
+    
+    local configPath = configFolder .. configName .. ".json"
+    
+    if not isfile(configPath) then
+        Rayfield:Notify({
+            Title = "Load Error",
+            Content = "Config '" .. configName .. "' not found!",
+            Duration = 4
+        })
+        return false
+    end
+    
+    local success, configData = pcall(function()
+        return HttpService:JSONDecode(readfile(configPath))
+    end)
+    
+    if not success then
+        Rayfield:Notify({
+            Title = "Load Error",
+            Content = "Failed to load config file!",
+            Duration = 4
+        })
+        return false
+    end
+    
+    -- Apply configuration settings
+    currentConfig = configName
+    
+    -- Apply basic settings
+    humanoid.WalkSpeed = configData.walkSpeed or 16
+    humanoid.JumpPower = configData.jumpPower or 50
+    flyMaxSpeed = configData.flySpeed or 50
+    spinSpeed = configData.spinSpeed or 50
+    currentGravity = configData.gravity or workspace.Gravity
+    antiAfkInterval = configData.antiAfkInterval or 1
+    
+    -- Apply saved locations
+    savedLocations = configData.savedLocations or {}
+    
+    -- Disable all features first to avoid conflicts
+    toggleFly(false)
+    toggleSuperJump(false)
+    toggleInfiniteJump(false)
+    toggleNoclip(false)
+    if espEnabled then disableESP() end
+    toggleClickTeleport(false)
+    toggleFPSDisplay(false)
+    toggleAntiAfk(false)
+    toggleInstantPrompt(false)
+    togglePromptHoldBypass(false)
+    toggleSpinMode(false)
+    toggleGravityControl(false)
+    
+    -- Wait a frame for cleanup
+    wait(0.1)
+    
+    -- Enable features based on saved state
+    if configData.flyEnabled then toggleFly(true) end
+    if configData.superJumpEnabled then toggleSuperJump(true) end
+    if configData.infiniteJumpEnabled then toggleInfiniteJump(true) end
+    if configData.noclipEnabled then toggleNoclip(true) end
+    if configData.espEnabled then enableESP() end
+    if configData.clickTeleportEnabled then toggleClickTeleport(true) end
+    if configData.fpsDisplayEnabled then toggleFPSDisplay(true) end
+    if configData.antiAfkEnabled then toggleAntiAfk(true) end
+    if configData.instantPromptEnabled then toggleInstantPrompt(true) end
+    if configData.promptHoldBypassEnabled then togglePromptHoldBypass(true) end
+    if configData.spinEnabled then toggleSpinMode(true) end
+    if configData.gravityControlEnabled then toggleGravityControl(true) end
+    
+    -- Refresh location buttons if they exist
+    if refreshLocationButtons then
+        refreshLocationButtons()
+    end
+    
+    Rayfield:Notify({
+        Title = "Configuration Loaded",
+        Content = string.format("Loaded '%s' by %s\nCreated: %s", configName, configData.creator, configData.date),
+        Duration = 6
+    })
+    
+    return true
+end
+
+local function deleteConfiguration(configName)
+    ensureConfigFolder()
+    
+    local configPath = configFolder .. configName .. ".json"
+    
+    if not isfile(configPath) then
+        Rayfield:Notify({
+            Title = "Delete Error",
+            Content = "Config '" .. configName .. "' not found!",
+            Duration = 4
+        })
+        return false
+    end
+    
+    delfile(configPath)
+    
+    Rayfield:Notify({
+        Title = "Configuration Deleted",
+        Content = "Config '" .. configName .. "' deleted successfully!",
+        Duration = 4
+    })
+    
+    return true
+end
+
+local function getConfigurations()
+    ensureConfigFolder()
+    
+    local configs = {}
+    local files = listfiles(configFolder)
+    
+    for _, file in pairs(files) do
+        if string.sub(file, -5) == ".json" then
+            local configName = string.match(file, "([^/]+)%.json$")
+            if configName then
+                table.insert(configs, configName)
+            end
+        end
+    end
+    
+    return configs
+end
+
+-- ===== INSTANT PROMPT HOLD BYPASS =====
+local function togglePromptHoldBypass(value)
+    promptHoldBypassEnabled = value
+    if value then
+        Rayfield:Notify({
+            Title = "Prompt Hold Bypass",
+            Content = "All ProximityPrompt hold times set to 0!",
+            Duration = 4
+        })
+        
+        local function modifyPrompt(prompt)
+            if prompt:IsA("ProximityPrompt") then
+                prompt.HoldDuration = 0
+                prompt.Enabled = true
+            end
+        end
+        
+        for _, prompt in pairs(workspace:GetDescendants()) do
+            modifyPrompt(prompt)
+        end
+        
+        promptBypassConnection = workspace.DescendantAdded:Connect(function(descendant)
+            if promptHoldBypassEnabled then
+                modifyPrompt(descendant)
+            end
+        end)
+        
+        for _, prompt in pairs(ProximityPromptService:GetChildren()) do
+            modifyPrompt(prompt)
+        end
+        
+        ProximityPromptService.ChildAdded:Connect(function(child)
+            if promptHoldBypassEnabled then
+                modifyPrompt(child)
+            end
+        end)
+    else
+        if promptBypassConnection then
+            promptBypassConnection:Disconnect()
+            promptBypassConnection = nil
+        end
+        
+        for _, prompt in pairs(workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                prompt.HoldDuration = 0.5
+            end
+        end
+        
+        Rayfield:Notify({
+            Title = "Prompt Hold Bypass",
+            Content = "Prompt hold times restored to normal!",
+            Duration = 2
+        })
+    end
+end
+
+-- ===== GRAVITY CONTROL SYSTEM =====
+local currentGravity = workspace.Gravity
+
+local function updateGravity(newGravity)
+    currentGravity = newGravity
+    if gravityControlEnabled then
+        workspace.Gravity = newGravity
+    end
+    Rayfield:Notify({
+        Title = "Gravity Control",
+        Content = "Gravity set to: " .. newGravity,
+        Duration = 2
+    })
+end
+
+local function toggleGravityControl(value)
+    gravityControlEnabled = value
+    if value then
+        originalGravity = workspace.Gravity
+        workspace.Gravity = currentGravity
+        Rayfield:Notify({
+            Title = "Gravity Control",
+            Content = "Gravity control enabled! Current: " .. currentGravity,
+            Duration = 4
+        })
+    else
+        if originalGravity then
+            workspace.Gravity = originalGravity
+        else
+            workspace.Gravity = 196.2
+        end
+        Rayfield:Notify({
+            Title = "Gravity Control",
+            Content = "Gravity restored to normal!",
+            Duration = 2
+        })
+    end
+end
+
+-- ===== INSTANT PROMPT TRIGGER SYSTEM =====
+local function toggleInstantPrompt(value)
+    instantPromptEnabled = value
+    if value then
+        Rayfield:Notify({
+            Title = "Instant Prompt",
+            Content = "Auto-triggering all proximity prompts!",
+            Duration = 4
+        })
+        
+        promptConnection = RunService.Heartbeat:Connect(function()
+            if not instantPromptEnabled then return end
+            
+            for _, prompt in pairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    local triggerDistance = prompt.MaxActivationDistance
+                    local part = prompt.Parent
+                    if part and part:IsA("BasePart") then
+                        local distance = (humanoidRootPart.Position - part.Position).Magnitude
+                        if distance <= triggerDistance then
+                            fireproximityprompt(prompt)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if promptConnection then
+            promptConnection:Disconnect()
+            promptConnection = nil
+        end
+        Rayfield:Notify({
+            Title = "Instant Prompt",
+            Content = "Auto-trigger disabled!",
+            Duration = 2
+        })
+    end
+end
+
+-- ===== FAST SPIN MODE =====
+local spinSpeed = 50
+
+local function updateSpinSpeed(newSpeed)
+    spinSpeed = newSpeed
+    if spinEnabled and spinBodyVelocity then
+        spinBodyVelocity.AngularVelocity = Vector3.new(0, newSpeed, 0)
+    end
+    Rayfield:Notify({
+        Title = "Spin Speed",
+        Content = "Spin speed set to: " .. newSpeed,
+        Duration = 2
+    })
+end
+
+local function toggleSpinMode(value)
+    spinEnabled = value
+    if value then
+        spinBodyVelocity = Instance.new("BodyAngularVelocity")
+        spinBodyVelocity.MaxTorque = Vector3.new(0, math.huge, 0)
+        spinBodyVelocity.AngularVelocity = Vector3.new(0, spinSpeed, 0)
+        spinBodyVelocity.Parent = humanoidRootPart
+        
+        local antiGravity = Instance.new("BodyVelocity")
+        antiGravity.Velocity = Vector3.new(0, 10, 0)
+        antiGravity.MaxForce = Vector3.new(0, math.huge, 0)
+        antiGravity.Parent = humanoidRootPart
+        
+        spinConnection = RunService.Heartbeat:Connect(function()
+            if not spinEnabled or not spinBodyVelocity then return end
+            
+            if spinSpeed < 100 then
+                spinBodyVelocity.AngularVelocity = Vector3.new(0, spinSpeed * 2, 0)
+            else
+                spinBodyVelocity.AngularVelocity = Vector3.new(spinSpeed * 0.1, spinSpeed, spinSpeed * 0.1)
+            end
+            
+            if math.random(1, 3) == 1 then
+                local trail = Instance.new("Trail")
+                trail.Attachment0 = humanoidRootPart:FindFirstChild("RootAttachment") or Instance.new("Attachment", humanoidRootPart)
+                trail.Attachment1 = trail.Attachment0
+                trail.Lifetime = 0.5
+                trail.Color = ColorSequence.new(Color3.fromRGB(math.random(50, 255), math.random(50, 255), math.random(50, 255)))
+                trail.Parent = humanoidRootPart
+                game:GetService("Debris"):AddItem(trail, 1)
+            end
+        end)
+        
+        Rayfield:Notify({
+            Title = "Fast Spin Mode",
+            Content = "SPINNING TO INFINITY! Speed: " .. spinSpeed,
+            Duration = 5
+        })
+    else
+        if spinConnection then
+            spinConnection:Disconnect()
+            spinConnection = nil
+        end
+        if spinBodyVelocity then
+            spinBodyVelocity:Destroy()
+            spinBodyVelocity = nil
+        end
+        
+        for _, obj in pairs(humanoidRootPart:GetChildren()) do
+            if obj:IsA("BodyVelocity") then
+                obj:Destroy()
+            end
+        end
+        
+        humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        Rayfield:Notify({
+            Title = "Fast Spin Mode",
+            Content = "Spin mode disabled!",
+            Duration = 2
+        })
+    end
+end
+
+-- ===== ENHANCED FLY SYSTEM =====
+local flySpeed = 50
+local flyActive = false
+local flyBodyVelocity, flyBodyGyro
+local flyControls = {f = 0, b = 0, l = 0, r = 0}
+local lastFlyControls = {f = 0, b = 0, l = 0, r = 0}
+local flyMaxSpeed = 50
+local currentFlySpeed = 0
+local tpWalking = false
+
+local function updateFlySpeed(newSpeed)
+    flyMaxSpeed = newSpeed
+    Rayfield:Notify({
+        Title = "Fly Speed",
+        Content = "Fly speed set to: " .. newSpeed,
+        Duration = 2
+    })
+end
+
+local function createFlyObjects()
+    if character:FindFirstChild("Humanoid").RigType == Enum.HumanoidRigType.R6 then
+        local torso = character:FindFirstChild("Torso")
+        if torso then
+            flyBodyGyro = Instance.new("BodyGyro", torso)
+            flyBodyVelocity = Instance.new("BodyVelocity", torso)
+            flyBodyGyro.P = 9e4
+            flyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            flyBodyGyro.cframe = torso.CFrame
+            flyBodyVelocity.velocity = Vector3.new(0, 0.1, 0)
+            flyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        end
+    else
+        local upperTorso = character:FindFirstChild("UpperTorso")
+        if upperTorso then
+            flyBodyGyro = Instance.new("BodyGyro", upperTorso)
+            flyBodyVelocity = Instance.new("BodyVelocity", upperTorso)
+            flyBodyGyro.P = 9e4
+            flyBodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            flyBodyGyro.cframe = upperTorso.CFrame
+            flyBodyVelocity.velocity = Vector3.new(0, 0.1, 0)
+            flyBodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+        end
+    end
+end
+
+local function destroyFlyObjects()
+    if flyBodyGyro then
+        flyBodyGyro:Destroy()
+        flyBodyGyro = nil
+    end
+    if flyBodyVelocity then
+        flyBodyVelocity:Destroy()
+        flyBodyVelocity = nil
+    end
+end
+
+local function toggleFly(value)
+    flyEnabled = value
+    if value then
+        createFlyObjects()
+        humanoid.PlatformStand = true
+        player.Character.Animate.Disabled = true
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
+        humanoid:ChangeState(Enum.HumanoidStateType.Swimming)
+        
+        tpWalking = true
+        spawn(function()
+            local hb = RunService.Heartbeat
+            while tpWalking and hb:Wait() and character and humanoid and humanoid.Parent do
+                if humanoid.MoveDirection.Magnitude > 0 then
+                    character:TranslateBy(humanoid.MoveDirection)
+                end
+            end
+        end)
+        
+        flyConnection = RunService.Heartbeat:Connect(function()
+            if not flyEnabled or not character then return end
+            
+            flyControls = {f = 0, b = 0, l = 0, r = 0}
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then flyControls.f = 1 end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then flyControls.b = 1 end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then flyControls.l = 1 end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then flyControls.r = 1 end
+            
+            if flyControls.l + flyControls.r ~= 0 or flyControls.f + flyControls.b ~= 0 then
+                currentFlySpeed = currentFlySpeed + 0.5 + (currentFlySpeed / flyMaxSpeed)
+                if currentFlySpeed > flyMaxSpeed then currentFlySpeed = flyMaxSpeed end
+            elseif not (flyControls.l + flyControls.r ~= 0 or flyControls.f + flyControls.b ~= 0) and currentFlySpeed ~= 0 then
+                currentFlySpeed = currentFlySpeed - 1
+                if currentFlySpeed < 0 then currentFlySpeed = 0 end
+            end
+            
+            if (flyControls.l + flyControls.r) ~= 0 or (flyControls.f + flyControls.b) ~= 0 then
+                flyBodyVelocity.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (flyControls.f + flyControls.b)) + ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(flyControls.l + flyControls.r, (flyControls.f + flyControls.b) * 0.2, 0).p) - workspace.CurrentCamera.CoordinateFrame.p)) * currentFlySpeed
+                lastFlyControls = {f = flyControls.f, b = flyControls.b, l = flyControls.l, r = flyControls.r}
+            elseif (flyControls.l + flyControls.r) == 0 and (flyControls.f + flyControls.b) == 0 and currentFlySpeed ~= 0 then
+                flyBodyVelocity.velocity = ((workspace.CurrentCamera.CoordinateFrame.lookVector * (lastFlyControls.f + lastFlyControls.b)) + ((workspace.CurrentCamera.CoordinateFrame * CFrame.new(lastFlyControls.l + lastFlyControls.r, (lastFlyControls.f + lastFlyControls.b) * 0.2, 0).p) - workspace.CurrentCamera.CoordinateFrame.p)) * currentFlySpeed
+            else
+                flyBodyVelocity.velocity = Vector3.new(0, 0, 0)
+            end
+            
+            if flyBodyGyro then
+                flyBodyGyro.cframe = workspace.CurrentCamera.CoordinateFrame * CFrame.Angles(-math.rad((flyControls.f + flyControls.b) * 50 * currentFlySpeed / flyMaxSpeed), 0, 0)
+            end
+        end)
+        
+        Rayfield:Notify({
+            Title = "Enhanced Fly",
+            Content = "Fly enabled! Use WASD to move. Speed: " .. flyMaxSpeed,
+            Duration = 5
+        })
+    else
+        flyActive = false
+        tpWalking = false
+        currentFlySpeed = 0
+        if flyConnection then
+            flyConnection:Disconnect()
+            flyConnection = nil
+        end
+        destroyFlyObjects()
+        
+        if character and character:FindFirstChild("Animate") then
+            character.Animate.Disabled = false
+        end
+        
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, true)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+        humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        humanoid.PlatformStand = false
+        
+        Rayfield:Notify({
+            Title = "Enhanced Fly",
+            Content = "Fly disabled.",
+            Duration = 2
+        })
+    end
+end
+
+local jumpPower = 100
+
+local function updateJumpPower(newPower)
+    jumpPower = newPower
+    if superJumpEnabled and humanoid then
+        humanoid.JumpPower = newPower
+    end
+    Rayfield:Notify({
+        Title = "Jump Power",
+        Content = "Jump power set to: " .. newPower,
+        Duration = 2
+    })
+end
+
+local function toggleSuperJump(value)
+    superJumpEnabled = value
+    if value then
+        humanoid.JumpPower = jumpPower
+        Rayfield:Notify({
+            Title = "Super Jump",
+            Content = "Jump power set to " .. jumpPower,
+            Duration = 2
+        })
+    else
+        humanoid.JumpPower = 50
+        Rayfield:Notify({
+            Title = "Super Jump",
+            Content = "Jump power reset to normal.",
+            Duration = 2
+        })
+    end
+end
+
+
+local antiAfkInterval = 1
+
+local function updateAntiAfkInterval(newInterval)
+    antiAfkInterval = newInterval
+    Rayfield:Notify({
+        Title = "Anti-AFK",
+        Content = "Anti-AFK interval set to: " .. newInterval .. " minutes",
+        Duration = 2
+    })
+end
+
+local function toggleAntiAfk(value)
+    antiAfkEnabled = value
+    if value then
+        Rayfield:Notify({
+            Title = "Anti-AFK",
+            Content = "Anti-AFK enabled! Moving every " .. antiAfkInterval .. " minutes",
+            Duration = 4
+        })
+        
+        antiAfkConnection = RunService.Heartbeat:Connect(function()
+            if antiAfkEnabled and humanoidRootPart then
+                wait(antiAfkInterval * 60)
+                if antiAfkEnabled then
+                    local currentPos = humanoidRootPart.Position
+                    humanoidRootPart.CFrame = CFrame.new(currentPos + Vector3.new(0, 1, 0))
+                    wait(0.1)
+                    humanoidRootPart.CFrame = CFrame.new(currentPos)
+                    Rayfield:Notify({
+                        Title = "Anti-AFK",
+                        Content = "Moved to prevent AFK detection",
+                        Duration = 2
+                    })
+                end
+            end
+        end)
+    else
+        if antiAfkConnection then
+            antiAfkConnection:Disconnect()
+            antiAfkConnection = nil
+        end
+        Rayfield:Notify({
+            Title = "Anti-AFK",
+            Content = "Anti-AFK disabled",
+            Duration = 2
+        })
+    end
+end
+
+
+local function toggleFPSDisplay(value)
+    fpsDisplayEnabled = value
+    if value then
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "SHOX_FPS_Display"
+        screenGui.Parent = player.PlayerGui
+        
+        fpsLabel = Instance.new("TextLabel")
+        fpsLabel.Name = "FPSPingDisplay"
+        fpsLabel.Size = UDim2.new(0, 200, 0, 40)
+        fpsLabel.Position = UDim2.new(0, 10, 0, 10)
+        fpsLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        fpsLabel.BackgroundTransparency = 0.5
+        fpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        fpsLabel.Text = "FPS: 60 | Ping: 0ms"
+        fpsLabel.TextSize = 14
+        fpsLabel.Font = Enum.Font.GothamBold
+        fpsLabel.TextStrokeTransparency = 0
+        fpsLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        fpsLabel.Parent = screenGui
+        
+        local frameCount = 0
+        local lastTime = tick()
+        
+        RunService.Heartbeat:Connect(function()
+            if not fpsDisplayEnabled then
+                if screenGui then screenGui:Destroy() end
+                return
+            end
+            
+            frameCount = frameCount + 1
+            local currentTime = tick()
+            
+            if currentTime - lastTime >= 1 then
+                local fps = math.floor(frameCount / (currentTime - lastTime))
+                local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+                fpsLabel.Text = string.format("FPS: %d | Ping: %dms", fps, ping)
+                
+                if fps < 30 then
+                    fpsLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+                elseif fps < 60 then
+                    fpsLabel.TextColor3 = Color3.fromRGB(255, 255, 50)
+                else
+                    fpsLabel.TextColor3 = Color3.fromRGB(50, 255, 50)
+                end
+                
+                frameCount = 0
+                lastTime = currentTime
+            end
+        end)
+        
+        Rayfield:Notify({
+            Title = "FPS & Ping Display",
+            Content = "Performance monitor enabled!",
+            Duration = 2
+        })
+    else
+        if fpsLabel and fpsLabel.Parent then
+            fpsLabel.Parent:Destroy()
+        end
+        fpsLabel = nil
+        Rayfield:Notify({
+            Title = "FPS & Ping Display",
+            Content = "Performance monitor disabled!",
+            Duration = 2
+        })
+    end
+end
+
+
+local function createESP(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    
+    if espObjects[targetPlayer] then
+        for _, obj in pairs(espObjects[targetPlayer]) do
+            if obj then obj:Remove() end
+        end
+    end
+    
+    espObjects[targetPlayer] = {}
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "SHOX_ESP"
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Parent = targetPlayer.Character
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "SHOX_ESP_GUI"
+    billboard.Size = UDim2.new(0, 200, 0, 100)
+    billboard.AlwaysOnTop = true
+    billboard.Enabled = true
+    
+    local head = targetPlayer.Character:FindFirstChild("Head")
+    if head then
+        billboard.Adornee = head
+        billboard.Parent = head
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "Name"
+        nameLabel.Size = UDim2.new(1, 0, 0.3, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = targetPlayer.Name
+        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLabel.TextSize = 14
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.Parent = billboard
+        
+        local distanceLabel = Instance.new("TextLabel")
+        distanceLabel.Name = "Distance"
+        distanceLabel.Size = UDim2.new(1, 0, 0.3, 0)
+        distanceLabel.Position = UDim2.new(0, 0, 0.3, 0)
+        distanceLabel.BackgroundTransparency = 1
+        distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        distanceLabel.TextSize = 12
+        distanceLabel.Font = Enum.Font.Gotham
+        distanceLabel.Parent = billboard
+        
+        local healthLabel = Instance.new("TextLabel")
+        healthLabel.Name = "Health"
+        healthLabel.Size = UDim2.new(1, 0, 0.3, 0)
+        healthLabel.Position = UDim2.new(0, 0, 0.6, 0)
+        healthLabel.BackgroundTransparency = 1
+        healthLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        healthLabel.TextSize = 12
+        healthLabel.Font = Enum.Font.Gotham
+        healthLabel.Parent = billboard
+    end
+    
+    table.insert(espObjects[targetPlayer], highlight)
+    table.insert(espObjects[targetPlayer], billboard)
+    
+    local updateConnection
+    updateConnection = RunService.Heartbeat:Connect(function()
+        if not espEnabled or not targetPlayer.Character or not character then
+            if updateConnection then updateConnection:Disconnect() end
+            return
+        end
+        
+        local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if targetRoot and humanoidRootPart then
+            local distance = (humanoidRootPart.Position - targetRoot.Position).Magnitude
+            if billboard and billboard:FindFirstChild("Distance") then
+                billboard.Distance.Text = string.format("Distance: %.1f", distance)
+            end
+            
+            local targetHumanoid = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if targetHumanoid and billboard and billboard:FindFirstChild("Health") then
+                billboard.Health.Text = string.format("Health: %d/%d", targetHumanoid.Health, targetHumanoid.MaxHealth)
+            end
+        end
+    end)
+    
+    table.insert(espObjects[targetPlayer], updateConnection)
+end
+
+local function enableESP()
+    espEnabled = true
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Players.LocalPlayer then
+            if player.Character then
+                createESP(player)
+            end
+            player.CharacterAdded:Connect(function(char)
+                wait(1)
+                if espEnabled then
+                    createESP(player)
+                end
+            end)
+        end
+    end
+    
+    Players.PlayerAdded:Connect(function(player)
+        player.CharacterAdded:Connect(function(char)
+            wait(1)
+            if espEnabled then
+                createESP(player)
+            end
+        end)
+    end)
+    
+    Rayfield:Notify({
+        Title = "ESP",
+        Content = "Player ESP enabled!",
+        Duration = 3
+    })
+end
+
+local function disableESP()
+    espEnabled = false
+    for player, objects in pairs(espObjects) do
+        for _, obj in pairs(objects) do
+            if obj then
+                if typeof(obj) == "RBXScriptConnection" then
+                    obj:Disconnect()
+                else
+                    obj:Destroy()
+                end
+            end
+        end
+    end
+    espObjects = {}
+    
+    Rayfield:Notify({
+        Title = "ESP",
+        Content = "Player ESP disabled!",
+        Duration = 3
+    })
+end
+
+local function teleportToPlayer(targetPlayer)
+    if not targetPlayer or targetPlayer == Players.LocalPlayer then
+        Rayfield:Notify({
+            Title = "Teleport Error",
+            Content = "Invalid target player!",
+            Duration = 3
+        })
+        return false
+    end
+    
+    if targetPlayer.Character then
+        local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if targetRoot then
+            humanoidRootPart.CFrame = targetRoot.CFrame + Vector3.new(0, 3, 0)
+            Rayfield:Notify({
+                Title = "Teleport",
+                Content = "Teleported to " .. targetPlayer.Name,
+                Duration = 3
+            })
+            return true
+        end
+    else
+        Rayfield:Notify({
+            Title = "Teleport",
+            Content = "Player '" .. targetPlayer.Name .. "' has no character!",
+            Duration = 3
+        })
+        return false
+    end
+end
+
+local function teleportToTouchPosition(touchPosition)
+    if character and humanoidRootPart then
+        local camera = workspace.CurrentCamera
+        local ray = camera:ViewportPointToRay(touchPosition.X, touchPosition.Y)
+        local raycastParams = RaycastParams.new()
+        raycastParams.FilterDescendantsInstances = {character}
+        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+        local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+        
+        if raycastResult then
+            local newPosition = raycastResult.Position + Vector3.new(0, 3, 0)
+            humanoidRootPart.CFrame = CFrame.new(newPosition)
+            Rayfield:Notify({
+                Title = "Click Teleport",
+                Content = "Teleported to clicked location!",
+                Duration = 3
+            })
+            return true
+        else
+            Rayfield:Notify({
+                Title = "Click Teleport Error",
+                Content = "No valid position found!",
+                Duration = 3
+            })
+            return false
+        end
+    else
+        Rayfield:Notify({
+            Title = "Click Teleport Error",
+            Content = "Character not found!",
+            Duration = 3
+        })
+        return false
+    end
+end
+
+local function toggleClickTeleport(value)
+    clickTeleportEnabled = value
+    if value then
+        clickTeleportConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                teleportToTouchPosition(input.Position)
+            end
+        end)
+        Rayfield:Notify({
+            Title = "Click Teleport",
+            Content = "Click anywhere to teleport! (Mouse/Touch)",
+            Duration = 4
+        })
+    else
+        if clickTeleportConnection then
+            clickTeleportConnection:Disconnect()
+        end
+        Rayfield:Notify({
+            Title = "Click Teleport",
+            Content = "Click teleport disabled!",
+            Duration = 2
+        })
+    end
+end
+
+
+local function saveCurrentLocation(name)
+    if not name or name == "" then
+        name = "Location_" .. os.time()
+    end
+    
+    if humanoidRootPart then
+        savedLocations[name] = {
+            Position = humanoidRootPart.Position,
+            CFrame = humanoidRootPart.CFrame
+        }
+        Rayfield:Notify({
+            Title = "Location Saved",
+            Content = "Saved as: " .. name,
+            Duration = 3
+        })
+        return true
+    end
+    return false
+end
+
+local function teleportToSavedLocation(name)
+    if savedLocations[name] and humanoidRootPart then
+        humanoidRootPart.CFrame = savedLocations[name].CFrame
+        Rayfield:Notify({
+            Title = "Teleport",
+            Content = "Teleported to: " .. name,
+            Duration = 3
+        })
+        return true
+    else
+        Rayfield:Notify({
+            Title = "Location Error",
+            Content = "Location not found: " .. name,
+            Duration = 3
+        })
+        return false
+    end
+end
+
+local function teleportToSpawn()
+    local spawnLocation = workspace:FindFirstChild("SpawnLocation") or workspace:FindFirstChildOfClass("SpawnLocation") or workspace:FindFirstChild("Part")
+    if spawnLocation then
+        humanoidRootPart.CFrame = CFrame.new(spawnLocation.Position + Vector3.new(0, 5, 0))
+        Rayfield:Notify({
+            Title = "Teleport",
+            Content = "Teleported to spawn location!",
+            Duration = 3
+        })
+    else
+        humanoidRootPart.CFrame = CFrame.new(0, 50, 0)
+        Rayfield:Notify({
+            Title = "Teleport",
+            Content = "Teleported to default location!",
+            Duration = 3
+        })
+    end
+end
+
+local function toggleNoclip(value)
+    noclipEnabled = value
+    if value then
+        noclipConnection = RunService.Heartbeat:Connect(function()
+            if character and noclipEnabled then
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+        Rayfield:Notify({
+            Title = "Noclip",
+            Content = "Anti-collision enabled.",
+            Duration = 2
+        })
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        Rayfield:Notify({
+            Title = "Noclip",
+            Content = "Anti-collision disabled.",
+            Duration = 2
+        })
+    end
+end
+
+local function toggleInfiniteJump(value)
+    infiniteJumpEnabled = value
+    if value then
+        Rayfield:Notify({
+            Title = "Infinite Jump",
+            Content = "Infinite jump enabled.",
+            Duration = 2
+        })
+    else
+        Rayfield:Notify({
+            Title = "Infinite Jump",
+            Content = "Infinite jump disabled.",
+            Duration = 2
+        })
+    end
+end
+
+-- Connect the infinite jump handler
+UserInputService.JumpRequest:Connect(function()
+    if infiniteJumpEnabled and humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+local MainTab = Window:CreateTab("Player Mods", "settings")
+local ESPTab = Window:CreateTab("Player ESP", "users")
+local TeleportTab = Window:CreateTab("Teleport", "map-pin")
+local LocationsTab = Window:CreateTab("Locations", "bookmark")
+local ServerTab = Window:CreateTab("Server", "server")
+local UtilitiesTab = Window:CreateTab("Utilities", "shield")
+local FunTab = Window:CreateTab("Fun & Troll", "star")
+local ConfigTab = Window:CreateTab("Configurations", "save")
+local InfoTab = Window:CreateTab("Info", "info")
+
+ConfigTab:CreateSection("Configuration Management")
+
+local configNameInput = ""
+ConfigTab:CreateInput({
+    Name = "Configuration Name",
+    PlaceholderText = "Enter config name...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        configNameInput = Text
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = " Save Current Configuration",
+    Callback = function()
+        if configNameInput and configNameInput ~= "" then
+            saveConfiguration(configNameInput)
+        else
+            Rayfield:Notify({
+                Title = "Save Error",
+                Content = "Please enter a configuration name!",
+                Duration = 3
+            })
+        end
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = " Quick Save (Auto-name)",
+    Callback = function()
+        local autoName = "Config_" .. os.date("%Y%m%d_%H%M%S")
+        saveConfiguration(autoName)
+    end,
+})
+
+ConfigTab:CreateSection("Load Configurations")
+
+local selectedConfig = ""
+local configDropdown = ConfigTab:CreateDropdown({
+    Name = "Saved Configurations",
+    Options = getConfigurations(),
+    CurrentOption = "",
+    Callback = function(Option)
+        selectedConfig = Option
+    end,
+})
+
+local function refreshConfigDropdown()
+    configDropdown:Refresh(getConfigurations())
+end
+
+ConfigTab:CreateButton({
+    Name = " Refresh Config List",
+    Callback = refreshConfigDropdown,
+})
+
+ConfigTab:CreateButton({
+    Name = " Load Selected Configuration",
+    Callback = function()
+        if selectedConfig and selectedConfig ~= "" then
+            loadConfiguration(selectedConfig)
+        else
+            Rayfield:Notify({
+                Title = "Load Error",
+                Content = "Please select a configuration to load!",
+                Duration = 3
+            })
+        end
+    end,
+})
+
+ConfigTab:CreateButton({
+    Name = " Delete Selected Configuration",
+    Callback = function()
+        if selectedConfig and selectedConfig ~= "" then
+            deleteConfiguration(selectedConfig)
+            refreshConfigDropdown()
+        else
+            Rayfield:Notify({
+                Title = "Delete Error",
+                Content = "Please select a configuration to delete!",
+                Duration = 3
+            })
+        end
+    end,
+})
+
+ConfigTab:CreateSection("Configuration Info")
+ConfigTab:CreateLabel("Current Config: " .. currentConfig)
+ConfigTab:CreateLabel("Total Saved: " .. #getConfigurations() .. " configs")
+
+
+InfoTab:CreateSection("SHOX MENU ULTIMATE")
+InfoTab:CreateLabel("Version: 2.0 Enhanced")
+InfoTab:CreateLabel("Created by: @AreHuRoblox")
+InfoTab:CreateLabel("Original Telegram: @AreHuRoblox")
+
+InfoTab:CreateSection("Features")
+InfoTab:CreateLabel("• Enhanced Mobile Fly System")
+InfoTab:CreateLabel("• Player ESP & Teleport")
+InfoTab:CreateLabel("• Configuration System")
+InfoTab:CreateLabel("• Fun & Troll Features")
+InfoTab:CreateLabel("• Gravity Control")
+InfoTab:CreateLabel("• Anti-AFK System")
+
+InfoTab:CreateSection("Controls")
+InfoTab:CreateLabel("Toggle Menu: K Key")
+InfoTab:CreateLabel("Fly: WASD Keys")
+InfoTab:CreateLabel("Click Teleport: Mouse/Touch")
+
+MainTab:CreateSection("Movement")
+MainTab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {16, 200},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Callback = function(Value)
+        humanoid.WalkSpeed = Value
+    end,
+})
+
+MainTab:CreateSlider({
+    Name = "Jump Power",
+    Range = {50, 500},
+    Increment = 10,
+    Suffix = "Power",
+    CurrentValue = 100,
+    Callback = updateJumpPower,
+})
+
+MainTab:CreateSlider({
+    Name = "Fly Speed",
+    Range = {10, 200},
+    Increment = 5,
+    Suffix = "Speed",
+    CurrentValue = 50,
+    Callback = updateFlySpeed,
+})
+
+MainTab:CreateToggle({
+    Name = "Enhanced Fly Mode",
+    CurrentValue = false,
+    Callback = toggleFly,
+})
+
+MainTab:CreateToggle({
+    Name = "Super Jump",
+    CurrentValue = false,
+    Callback = toggleSuperJump,
+})
+
+MainTab:CreateToggle({
+    Name = "Infinite Jump",
+    CurrentValue = false,
+    Callback = toggleInfiniteJump,
+})
+
+MainTab:CreateToggle({
+    Name = "Anti-Collision (Noclip)",
+    CurrentValue = false,
+    Callback = toggleNoclip,
+})
+
+MainTab:CreateToggle({
+    Name = "Show FPS & Ping",
+    CurrentValue = false,
+    Callback = toggleFPSDisplay,
+})
+
+FunTab:CreateSection("Proximity Prompt Controls")
+FunTab:CreateToggle({
+    Name = "Instant Prompt Hold Bypass",
+    CurrentValue = false,
+    Callback = togglePromptHoldBypass,
+})
+
+FunTab:CreateToggle({
+    Name = "Auto-Trigger All Prompts",
+    CurrentValue = false,
+    Callback = toggleInstantPrompt,
+})
+
+FunTab:CreateSection("Fast Spin Mode")
+FunTab:CreateSlider({
+    Name = "Spin Speed",
+    Range = {10, 500},
+    Increment = 10,
+    Suffix = "RPM",
+    CurrentValue = 50,
+    Callback = updateSpinSpeed,
+})
+
+FunTab:CreateToggle({
+    Name = "Enable Fast Spin",
+    CurrentValue = false,
+    Callback = toggleSpinMode,
+})
+
+FunTab:CreateButton({
+    Name = " Ultra Spin (MAX SPEED)",
+    Callback = function()
+        updateSpinSpeed(500)
+        if not spinEnabled then
+            toggleSpinMode(true)
+        end
+        Rayfield:Notify({
+            Title = "ULTRA SPIN",
+            Content = "MAXIMUM SPIN ACTIVATED! HOLD ON!",
+            Duration = 5
+        })
+    end,
+})
+
+FunTab:CreateSection("Gravity Control")
+FunTab:CreateSlider({
+    Name = "Gravity Level",
+    Range = {0, 500},
+    Increment = 10,
+    Suffix = "Gravity",
+    CurrentValue = workspace.Gravity,
+    Callback = updateGravity,
+})
+
+FunTab:CreateToggle({
+    Name = "Enable Gravity Control",
+    CurrentValue = false,
+    Callback = toggleGravityControl,
+})
+
+FunTab:CreateButton({
+    Name = " Zero Gravity",
+    Callback = function()
+        updateGravity(0)
+        if not gravityControlEnabled then
+            toggleGravityControl(true)
+        end
+        Rayfield:Notify({
+            Title = "Zero Gravity",
+            Content = "Floating in space!",
+            Duration = 4
+        })
+    end,
+})
+
+FunTab:CreateButton({
+    Name = " Low Gravity",
+    Callback = function()
+        updateGravity(50)
+        if not gravityControlEnabled then
+            toggleGravityControl(true)
+        end
+        Rayfield:Notify({
+            Title = "Low Gravity",
+            Content = "Moon gravity activated!",
+            Duration = 4
+        })
+    end,
+})
+
+FunTab:CreateButton({
+    Name = " High Gravity",
+    Callback = function()
+        updateGravity(300)
+        if not gravityControlEnabled then
+            toggleGravityControl(true)
+        end
+        Rayfield:Notify({
+            Title = "High Gravity",
+            Content = "Heavy gravity activated!",
+            Duration = 4
+        })
+    end,
+})
+
+UtilitiesTab:CreateSection("Anti-AFK System")
+UtilitiesTab:CreateSlider({
+    Name = "Anti-AFK Interval",
+    Range = {1, 10},
+    Increment = 1,
+    Suffix = "minutes",
+    CurrentValue = 1,
+    Callback = updateAntiAfkInterval,
+})
+
+UtilitiesTab:CreateToggle({
+    Name = "Enable Anti-AFK",
+    CurrentValue = false,
+    Callback = toggleAntiAfk,
+})
+
+UtilitiesTab:CreateSection("Performance")
+UtilitiesTab:CreateButton({
+    Name = " Rejoin Server",
+    Callback = function()
+        TeleportService:Teleport(game.PlaceId)
+    end,
+})
+
+-- ===== ESP TAB =====
+ESPTab:CreateSection("Player ESP")
+ESPTab:CreateToggle({
+    Name = "Enable ESP",
+    CurrentValue = false,
+    Callback = function(value)
+        if value then
+            enableESP()
+        else
+            disableESP()
+        end
+    end,
+})
+
+TeleportTab:CreateSection("Player Teleport")
+
+local searchText = ""
+local allPlayers = {}
+local filteredPlayers = {}
+local teleportButtonsContainer = {}
+
+local function updatePlayerList()
+    allPlayers = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Players.LocalPlayer then
+            table.insert(allPlayers, player.Name)
+        end
+    end
+    table.sort(allPlayers)
+    
+    filteredPlayers = {}
+    if searchText == "" then
+        filteredPlayers = allPlayers
+    else
+        for _, playerName in pairs(allPlayers) do
+            if string.find(string.lower(playerName), string.lower(searchText)) then
+                table.insert(filteredPlayers, playerName)
+            end
+        end
+    end
+end
+
+local function refreshTeleportButtons()
+    for _, button in pairs(teleportButtonsContainer) do
+        button:Destroy()
+    end
+    teleportButtonsContainer = {}
+    
+    for _, playerName in pairs(filteredPlayers) do
+        local button = TeleportTab:CreateButton({
+            Name = " TP to " .. playerName,
+            Callback = function()
+                local targetPlayer = Players:FindFirstChild(playerName)
+                if targetPlayer then
+                    teleportToPlayer(targetPlayer)
+                else
+                    Rayfield:Notify({
+                        Title = "Teleport Error",
+                        Content = "Player not found: " .. playerName,
+                        Duration = 3
+                    })
+                end
+            end,
+        })
+        table.insert(teleportButtonsContainer, button)
+    end
+    
+    if #filteredPlayers == 0 and searchText ~= "" then
+        TeleportTab:CreateLabel("No players found matching: " .. searchText)
+    end
+end
+
+TeleportTab:CreateInput({
+    Name = " Search Players",
+    PlaceholderText = "Type to search players...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        searchText = Text
+        updatePlayerList()
+        refreshTeleportButtons()
+    end,
+})
+
+TeleportTab:CreateButton({
+    Name = " Refresh Player List",
+    Callback = function()
+        updatePlayerList()
+        refreshTeleportButtons()
+        Rayfield:Notify({
+            Title = "Player List",
+            Content = "Player list refreshed!",
+            Duration = 2
+        })
+    end,
+})
+
+TeleportTab:CreateSection("Click Teleport")
+TeleportTab:CreateToggle({
+    Name = "Enable Click Teleport",
+    CurrentValue = false,
+    Callback = toggleClickTeleport,
+})
+
+updatePlayerList()
+refreshTeleportButtons()
+
+Players.PlayerAdded:Connect(function()
+    updatePlayerList()
+    refreshTeleportButtons()
+end)
+
+Players.PlayerRemoving:Connect(function()
+    updatePlayerList()
+    refreshTeleportButtons()
+end)
+
+-- ===== LOCATIONS TAB =====
+LocationsTab:CreateSection("Save Locations")
+
+local locationNameInput = ""
+LocationsTab:CreateInput({
+    Name = "Location Name",
+    PlaceholderText = "Enter name for this location",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        locationNameInput = Text
+    end,
+})
+
+LocationsTab:CreateButton({
+    Name = " Save Current Location",
+    Callback = function()
+        if locationNameInput and locationNameInput ~= "" then
+            saveCurrentLocation(locationNameInput)
+        else
+            Rayfield:Notify({
+                Title = "Save Error",
+                Content = "Please enter a location name!",
+                Duration = 3
+            })
+        end
+    end,
+})
+
+LocationsTab:CreateButton({
+    Name = " Quick Save Location",
+    Callback = function()
+        saveCurrentLocation()
+    end,
+})
+
+LocationsTab:CreateButton({
+    Name = " Teleport to Spawn",
+    Callback = teleportToSpawn
+})
+
+LocationsTab:CreateSection("Your Saved Locations")
+local locationButtonsContainer = {}
+
+local function refreshLocationButtons()
+    for _, button in pairs(locationButtonsContainer) do
+        button:Destroy()
+    end
+    locationButtonsContainer = {}
+    
+    for name, _ in pairs(savedLocations) do
+        local button = LocationsTab:CreateButton({
+            Name = " " .. name,
+            Callback = function()
+                teleportToSavedLocation(name)
+            end,
+        })
+        table.insert(locationButtonsContainer, button)
+    end
+    
+    if next(savedLocations) == nil then
+        LocationsTab:CreateLabel("No locations saved yet!")
+    end
+end
+
+LocationsTab:CreateButton({
+    Name = " Refresh Locations List",
+    Callback = refreshLocationButtons,
+})
+refreshLocationButtons()
+-- ===== SERVER TAB =====
+ServerTab:CreateSection("Server Info")
+ServerTab:CreateLabel("Current Players: " .. #Players:GetPlayers())
+
+-- ===== CHARACTER RESPAWN HANDLING =====
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    repeat RunService.Heartbeat:Wait() until character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")
+    humanoid = character:WaitForChild("Humanoid")
+    humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    
+    toggleFly(false)
+    toggleNoclip(false)
+    toggleSuperJump(false)
+    toggleInfiniteJump(false)
+    toggleClickTeleport(false)
+    toggleSpinMode(false)
+    toggleInstantPrompt(false)
+    toggleGravityControl(false)
+    humanoid.WalkSpeed = 16
+    
+    if espEnabled then
+        wait(2)
+        enableESP()
+    end
+    
+    if fpsDisplayEnabled then
+        wait(1)
+        toggleFPSDisplay(true)
+    end
+end)
+humanoid.WalkSpeed = 16
+
+Rayfield:Notify({
+    Title = "SHOX MENU ULTIMATE",
+    Content = "All Enhanced Features Loaded! Use K to toggle menu.",
+    Duration = 6
+})
+print(" SHOX MENU ULTIMATE - Complete Systems Activated!")
